@@ -1,0 +1,69 @@
+### Health
+GET http://localhost:8080/api/health
+
+### Init upload
+POST http://localhost:8080/api/upload/init
+Content-Type: application/json
+
+{
+  "fileId": "doc-http-001",
+  "totalChunks": 2
+}
+
+### Chunk #0
+POST http://localhost:8080/api/upload/chunk
+Content-Type: multipart/form-data; boundary=Boundary123
+
+--Boundary123
+Content-Disposition: form-data; name="fileId"
+
+doc-http-001
+--Boundary123
+Content-Disposition: form-data; name="totalChunks"
+
+2
+--Boundary123
+Content-Disposition: form-data; name="chunkIndex"
+
+0
+--Boundary123
+Content-Disposition: form-data; name="file"; filename="chunk0.txt"
+Content-Type: text/plain
+
+RAG combines retrieval and generation.
+--Boundary123--
+
+### Chunk #1
+POST http://localhost:8080/api/upload/chunk
+Content-Type: multipart/form-data; boundary=Boundary456
+
+--Boundary456
+Content-Disposition: form-data; name="fileId"
+
+doc-http-001
+--Boundary456
+Content-Disposition: form-data; name="totalChunks"
+
+2
+--Boundary456
+Content-Disposition: form-data; name="chunkIndex"
+
+1
+--Boundary456
+Content-Disposition: form-data; name="file"; filename="chunk1.txt"
+Content-Type: text/plain
+
+BM25 and vector search can be fused by RRF.
+--Boundary456--
+
+### mock模式手动消费
+POST http://localhost:8080/api/admin/consume-once
+
+### Ask
+POST http://localhost:8080/api/qa/ask
+Content-Type: application/json
+
+{
+  "query": "为什么要做双路检索",
+  "topK": 3
+}

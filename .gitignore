@@ -1,0 +1,10 @@
+target/
+.venv-reranker/
+.idea/
+.vscode/
+*.iml
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*

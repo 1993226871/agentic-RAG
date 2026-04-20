@@ -1,0 +1,14 @@
+rag:
+  mock-enabled: false
+
+spring:
+  redis:
+    host: localhost
+    port: 6379
+  elasticsearch:
+    uris: http://localhost:9200
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: rag-producer-group

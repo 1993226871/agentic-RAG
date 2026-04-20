@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic RAG Self Test</title>
+    <style>
+        :root {
+            --bg: #090b10;
+            --panel: #111522;
+            --panel-soft: #171d2e;
+            --line: #2f3852;
+            --text: #f2f5ff;
+            --muted: #9fb0d8;
+            --brand: #7c9dff;
+            --brand-2: #68e1ff;
+            --good: #4cd58f;
+            --bad: #ff7b8a;
+            --warn: #ffd36a;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            background: radial-gradient(1200px 800px at 80% -100px, #213568 0%, var(--bg) 45%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .shell {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 28px 18px 40px;
+        }
+
+        .hero {
+            border: 1px solid var(--line);
+            background: linear-gradient(150deg, rgba(124, 157, 255, 0.16), rgba(104, 225, 255, 0.05) 45%, rgba(11, 15, 24, 0.9) 100%);
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: 30px;
+            letter-spacing: 0.3px;
+        }
+
+        .hero p {
+            margin: 10px 0 0;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .grid {
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 14px;
+        }
+
+        .card {
+            border: 1px solid var(--line);
+            background: linear-gradient(180deg, var(--panel-soft), var(--panel));
+            border-radius: 16px;
+            padding: 16px;
+        }
+
+        .card h2 {
+            margin: 0 0 12px;
+            font-size: 17px;
+            color: #dce6ff;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        input, textarea, button {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid #36415f;
+            background: #0d1220;
+            color: var(--text);
+            padding: 10px 12px;
+            font-size: 14px;
+        }
+
+        input, textarea {
+            margin-bottom: 10px;
+        }
+
+        textarea {
+            min-height: 86px;
+            resize: vertical;
+        }
+
+        button {
+            cursor: pointer;
+            font-weight: 600;
+            background: linear-gradient(135deg, #5578ff, #38c8ff);
+            border: none;
+            transition: transform .12s ease, opacity .12s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            opacity: 0.95;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .badge {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            border: 1px solid #3f4e75;
+            color: var(--muted);
+        }
+
+        .log {
+            margin-top: 18px;
+            background: #0a0f1a;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 12px;
+            min-height: 220px;
+            max-height: 420px;
+            overflow: auto;
+            font-family: "Consolas", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .ok { color: var(--good); }
+        .err { color: var(--bad); }
+        .warn { color: var(--warn); }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <section class="hero">
+        <h1>Agentic RAG 自测台</h1>
+        <p>用于端到端验证：分片上传、断点续传状态、异步入库、混合检索问答。默认按本地 <code>http://localhost:8080</code> 调用。</p>
+        <span class="badge">建议步骤：Health -> 上传 -> (mock模式)consume -> 问答</span>
+    </section>
+
+    <section class="grid">
+        <article class="card">
+            <h2>1) 系统与上传</h2>
+            <label>Base URL</label>
+            <input id="baseUrl" value="http://localhost:8080"/>
+            <div class="row">
+                <button onclick="checkHealth()">检查 Health</button>
+                <button onclick="initUpload()">初始化上传</button>
+            </div>
+            <label>File ID</label>
+            <input id="fileId" value="doc-selftest-001"/>
+            <label>分片大小（字节）</label>
+            <input id="chunkSize" type="number" value="60"/>
+            <label>选择文件</label>
+            <input id="fileInput" type="file" accept=".txt,.md,.html,.json"/>
+            <button onclick="uploadAllChunks()">开始分片上传</button>
+            <div class="row">
+                <button onclick="checkChunkStatus()">查询分片1状态</button>
+                <button onclick="consumeMock()">mock消费一次</button>
+            </div>
+        </article>
+
+        <article class="card">
+            <h2>2) 在线问答</h2>
+            <label>问题</label>
+            <textarea id="query">RAG 为什么要同时做 BM25 和向量检索？</textarea>
+            <label>topK</label>
+            <input id="topK" type="number" value="3"/>
+            <button onclick="ask()">发起问答</button>
+        </article>
+    </section>
+
+    <section class="log" id="log"></section>
+</div>
+
+<script>
+    function log(msg, cls) {
+        const box = document.getElementById("log");
+        const line = document.createElement("div");
+        if (cls) line.className = cls;
+        line.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg;
+        box.appendChild(line);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function baseUrl() {
+        return document.getElementById("baseUrl").value.trim().replace(/\/$/, "");
+    }
+
+    function fileId() {
+        return document.getElementById("fileId").value.trim();
+    }
+
+    async function checkHealth() {
+        try {
+            const res = await fetch(baseUrl() + "/api/health");
+            log("Health: " + JSON.stringify(await res.json()), "ok");
+        } catch (e) {
+            log("Health失败: " + e.message, "err");
+        }
+    }
+
+    async function initUpload() {
+        const f = document.getElementById("fileInput").files[0];
+        if (!f) {
+            log("请先选择文件", "warn");
+            return;
+        }
+        const chunkSize = Number(document.getElementById("chunkSize").value);
+        const total = Math.ceil(f.size / chunkSize);
+        try {
+            const res = await fetch(baseUrl() + "/api/upload/init", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({fileId: fileId(), totalChunks: total})
+            });
+            log("初始化上传: " + JSON.stringify(await res.json()), "ok");
+        } catch (e) {
+            log("初始化失败: " + e.message, "err");
+        }
+    }
+
+    async function uploadAllChunks() {
+        const f = document.getElementById("fileInput").files[0];
+        if (!f) {
+            log("请先选择文件", "warn");
+            return;
+        }
+        const chunkSize = Number(document.getElementById("chunkSize").value);
+        const total = Math.ceil(f.size / chunkSize);
+        for (let i = 0; i < total; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, f.size);
+            const blob = f.slice(start, end);
+            const form = new FormData();
+            form.append("fileId", fileId());
+            form.append("totalChunks", String(total));
+            form.append("chunkIndex", String(i));
+            form.append("file", blob, f.name + ".part" + i);
+            try {
+                const res = await fetch(baseUrl() + "/api/upload/chunk", {method: "POST", body: form});
+                const body = await res.json();
+                log("分片#" + i + " 上传结果: " + JSON.stringify(body), "ok");
+            } catch (e) {
+                log("分片#" + i + " 上传失败: " + e.message, "err");
+                return;
+            }
+        }
+        log("所有分片上传请求已提交", "ok");
+    }
+
+    async function checkChunkStatus() {
+        try {
+            const res = await fetch(baseUrl() + "/api/upload/status?fileId=" + encodeURIComponent(fileId()) + "&chunkIndex=1");
+            log("分片1状态: " + JSON.stringify(await res.json()), "ok");
+        } catch (e) {
+            log("查询状态失败: " + e.message, "err");
+        }
+    }
+
+    async function consumeMock() {
+        try {
+            const res = await fetch(baseUrl() + "/api/admin/consume-once", {method: "POST"});
+            if (!res.ok) {
+                log("consume接口不可用（通常代表你在real模式）", "warn");
+                return;
+            }
+            log("mock消费结果: " + JSON.stringify(await res.json()), "ok");
+        } catch (e) {
+            log("mock消费失败: " + e.message, "err");
+        }
+    }
+
+    async function ask() {
+        const query = document.getElementById("query").value.trim();
+        const topK = Number(document.getElementById("topK").value);
+        try {
+            const res = await fetch(baseUrl() + "/api/qa/ask", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({query, topK})
+            });
+            log("问答结果: " + JSON.stringify(await res.json()), "ok");
+        } catch (e) {
+            log("问答失败: " + e.message, "err");
+        }
+    }
+
+    log("页面已就绪，可以开始自测。");
+</script>
+</body>
+</html>

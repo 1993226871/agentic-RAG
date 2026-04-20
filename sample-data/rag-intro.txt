@@ -1,0 +1,4 @@
+RAG（Retrieval-Augmented Generation）通常将“检索”和“生成”结合起来。
+在召回阶段，向量检索适合语义匹配，BM25适合关键词精确命中。
+双路召回后使用RRF融合，通常可以提升召回覆盖率与稳定性。
+最终再用reranker模型重排，提升TopK上下文质量，再交给LLM生成答案。
