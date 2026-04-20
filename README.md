@@ -1,190 +1,193 @@
 # Agentic RAG
 
-该项目实现了你要求的两条链路，并支持 `mock` 与 `real` 两种运行模式：
+一个完整的 RAG 示例项目，覆盖从文件入库到在线问答的全流程，并在问答侧引入 Agentic ReAct（可迭代检索）能力。
 
-- 离线上传链路：分片上传 -> Redis Bitmap 记录状态 -> MinIO 合并 -> RocketMQ 异步消息
-- 异步入库链路：Tika 解析 -> 文本分块 -> 阿里 Embedding（可回退 mock）-> Elasticsearch 存储
-- 在线问答链路：KNN（向量相似）+ BM25 双路召回 -> RRF 融合 -> BGE rerank（可回退 mock）
+适合用于：
+
+- 学习 RAG 工程化落地（上传、解析、向量化、检索、重排）
+- 本地搭建一套可运行的知识库问答系统
+- 二次开发 Agent 工具化检索、记忆摘要、多轮会话
+
+## 这个项目做了什么
+
+项目包含两条主链路：
+
+1. 离线上传入库链路
+   - 前端分片上传
+   - Redis Bitmap 记录分片状态（支持断点续传）
+   - MinIO 保存分片并合并文件
+   - RocketMQ 发送上传完成消息
+   - 异步消费后执行：Tika 解析 -> 文本分块 -> Embedding -> 写入 Elasticsearch
+
+2. 在线问答链路
+   - 用户问题进入 Agent/ReAct 决策循环
+   - 混合检索：向量检索（KNN）+ 关键词检索（BM25）
+   - RRF 融合多路检索结果
+   - Rerank 进行二次排序
+   - 输出最终答案和检索上下文
+
+另外支持：
+
+- 多用户隔离（`userId + fileMd5` 逻辑隔离）
+- 会话记忆摘要（达到阈值或结束会话后入库）
+- 可配置模型（百炼 Embedding、Rerank、Agent 规划）
+
+## 技术栈
+
+- 后端：Java 8、Spring Boot 2.7、Maven
+- 存储与中间件：Redis、MinIO、RocketMQ、Elasticsearch 7.17（IK 分词）
+- 文档处理：Apache Tika
+- 向量与大模型：DashScope（Qwen）
+- Agent 编排：LangChain4j（Planner）
+- 前端：原生 HTML/CSS/JS（`portal.html`、`self-test.html`）
+- 脚本与测试：PowerShell、JUnit 5
+
+## 项目结构（核心模块）
+
+- `src/main/java/com/agenticrag/api`：HTTP 接口层
+- `src/main/java/com/agenticrag/service`：业务编排层
+  - `OfflineUploadService`：上传链路
+  - `AsyncIngestionConsumer`：异步入库链路
+  - `OnlineQaService`：检索与问答基础能力
+  - `ReActAgentService`：Agent 迭代决策
+- `src/main/java/com/agenticrag/infra`：基础设施适配层
+  - `embedding`、`rerank`、`es`、`rocketmq`、`minio`、`redis`
+- `src/main/java/com/agenticrag/ports`：端口接口定义
+- `src/main/resources/application.yml`：主要配置
+- `scripts`：自测与辅助脚本
 
 ## 运行模式
 
-- `mock`：不依赖外部中间件，适合本地开发和自动化测试
-- `real`（默认）：连接 Redis / MinIO / RocketMQ / Elasticsearch
+- `mock`：轻依赖模式，便于本地快速开发和测试
+- `real`：真实中间件模式（默认）
 
-当前默认已切换为 `real`（`rag.mock-enabled: false`），即 RocketMQ 自动消费。
+当前默认配置为真实模式：`rag.mock-enabled: false`
 
-切换到真实模式：
+## 环境准备
 
-```bash
-mvn spring-boot:run -Dspring-boot.run.profiles=real
-```
+建议环境：
 
-## 启动中间件（真实模式）
+- JDK 8
+- Maven 3.8+
+- Docker / Docker Compose
+- Windows PowerShell（脚本使用）
 
-```bash
-docker compose up -d
-```
+## 快速上手（推荐流程）
 
-如果你在上传时看到 `sendDefaultImpl call timeout`，通常是 RocketMQ broker 对主机不可达。  
-本项目已内置 `docker/rocketmq/broker.conf` 并设置 `brokerIP1=127.0.0.1`，请重新创建容器使配置生效：
+### 1) 启动中间件
 
 ```bash
-docker compose down
 docker compose up -d --build
 ```
 
-包含服务：
+默认端口：
 
-- Redis: `localhost:6379`
-- MinIO: `localhost:9000`（console: `localhost:9001`）
-- Elasticsearch: `localhost:9200`
-- RocketMQ NameServer: `localhost:9876`
+- Redis: `6379`
+- MinIO: `9000`（Console `9001`）
+- Elasticsearch: `9200`
+- RocketMQ NameServer: `9876`
 
-> 注意：ES 已配置 IK 分词（`ik_max_word` / `ik_smart`）。请确认你的 ES 安装了 IK 插件，否则索引创建会失败。
-> 本项目的 `docker-compose.yml` 已改为自动构建带 IK 的 ES 镜像（首次启动会稍慢）。
+### 2) 配置模型 Key
 
-## 启动 BGE Reranker（本地服务）
+项目默认从环境变量读取百炼 Key：
 
-项目内已提供一个可直接对接 `BgeHttpReranker` 的 HTTP 服务：
+- `DASHSCOPE_API_KEY`
 
-- `scripts/reranker-server.py`
-- `scripts/requirements-reranker.txt`
+例如（Windows）：
 
-启动步骤：
+```powershell
+setx DASHSCOPE_API_KEY "your_api_key"
+```
+
+> 配置后请重新打开终端再启动服务。
+
+### 3) 启动项目
 
 ```bash
-python -m venv .venv-reranker
-.venv-reranker\Scripts\activate
-pip install -r scripts/requirements-reranker.txt
-uvicorn scripts.reranker-server:app --host 0.0.0.0 --port 8001
+mvn spring-boot:run
 ```
-
-Windows 一键启动（推荐）：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-reranker.ps1
-```
-
-指定模型启动：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-reranker.ps1 -Model "BAAI/bge-reranker-large"
-```
-
-默认模型：`BAAI/bge-reranker-base`（可用环境变量 `BGE_RERANK_MODEL` 覆盖）
 
 健康检查：
 
 ```bash
-curl http://127.0.0.1:8001/health
+curl http://localhost:8080/api/health
 ```
 
-项目中默认已配置：
+### 4) 打开页面体验
 
-- `rag.rerank.endpoint: http://127.0.0.1:8001/rerank`
+- 业务页面：`http://localhost:8080/portal.html`
+- 自测页面：`http://localhost:8080/self-test.html`
 
-## HTTP 接口
+默认用户：`root / 123456`
 
-### 1) 初始化上传任务
+## 核心配置说明
 
-`POST /api/upload/init`
+配置文件：`src/main/resources/application.yml`
 
-```json
-{
-  "fileId": "doc-001",
-  "totalChunks": 3
-}
-```
+常用配置项：
 
-### 2) 上传分片
+- `rag.embedding.*`：Embedding 模型与接口
+- `rag.rerank.*`：Rerank 模型与接口
+- `rag.rewrite.*`：Query Rewrite
+- `rag.agent.*`：ReAct Agent（开关、最大步数、规划模型）
+- `rag.memory.*`：会话记忆摘要与检索
 
-`POST /api/upload/chunk`（multipart/form-data）
+## 常用接口
 
-字段：
+### 上传相关
 
-- `fileId`
-- `totalChunks`
-- `chunkIndex`
-- `file`
+- `POST /api/upload/init`
+- `POST /api/upload/chunk`
+- `GET /api/upload/status`
 
-### 3) 查询分片状态
+### 问答相关
 
-`GET /api/upload/status?fileId=doc-001&chunkIndex=1`
+- `POST /api/qa/ask`
+- `POST /api/qa/ask-scoped`
+- `GET /api/qa/status-scoped`
+- `POST /api/qa/end-session`
 
-### 4) 在线问答
+### 认证
 
-`POST /api/qa/ask`
+- `POST /api/auth/login`
+- `POST /api/auth/register`
 
-```json
-{
-  "query": "RAG 为什么要同时使用 BM25 和向量检索",
-  "topK": 3
-}
-```
+## 本地自测
 
-## 模块测试与测试数据
-
-已覆盖并通过：
-
-- `OfflineUploadServiceTest`：断点续传、分片状态、合并触发、消息发送
-- `AsyncIngestionConsumerTest`：解析、分块、向量化、索引落库
-- `OnlineQaServiceTest`：KNN + BM25 + RRF + rerank
-- `EndToEndRagFlowTest`：离线上传到在线问答全链路
-- `RealAdapterFallbackTest`：阿里 embedding 与 BGE reranker 的真实接口回退策略
-
-运行测试：
+### 单元/集成测试
 
 ```bash
 mvn test
 ```
 
-## 手工自测指南
-
-### 方式A：浏览器可视化自测台（最推荐）
-
-启动服务后打开：
-
-- `http://localhost:8080/self-test.html`
-
-页面可直接操作完整链路：
-
-- 健康检查
-- 选择文件并自动分片上传
-- 查询分片上传状态
-- mock 模式下触发一次异步消费
-- 在线问答验证
-
-### 业务门户（多用户隔离）
-
-访问：
-
-- `http://localhost:8080/portal.html`
-
-功能：
-
-- 用户登录/注册（默认 `root / 123456`）
-- 文件分片上传
-- 浏览器端计算文件 MD5
-- 使用 `userId:md5` 作为隔离 `fileId`
-- 作用域问答接口：`/api/qa/ask-scoped`（只查当前用户+当前文件）
-- 前端消息提示采用弹出 `message window`（不再使用底部日志框）
-
-### 方式B：PowerShell一键自测
+### 真实链路 E2E
 
 ```powershell
-# mock模式（默认）
-powershell -ExecutionPolicy Bypass -File .\scripts\self-test.ps1 -Mode mock -FilePath .\sample-data\rag-intro.txt
-
-# real模式
-powershell -ExecutionPolicy Bypass -File .\scripts\self-test.ps1 -Mode real -FilePath .\sample-data\upload-resume.txt
+powershell -ExecutionPolicy Bypass -File .\scripts\e2e-real-check.ps1
 ```
 
-### 方式C：HTTP请求文件
+### 手工请求集合
 
-- 使用 `scripts/self-test.http` 逐条执行请求
-- 适合你在 IDE HTTP Client / Apifox / Postman 中对照调试
+- `scripts/self-test.http`
 
-## 额外说明
+## 常见问题
 
-- `mock` 模式下，消息消费不会自动触发，需要调用 `POST /api/admin/consume-once`
-- `real` 模式下，由 RocketMQ 监听器自动消费上传完成消息，无需手动调用
+### 1) Spring Boot 启动失败，提示 8080 被占用
+
+关闭占用进程，或改 `server.port`。
+
+### 2) Elasticsearch 建索引失败，提示 IK 相关错误
+
+确认 ES 使用了带 IK 的镜像（本项目 `docker-compose.yml` 已处理）。
+
+### 3) 上传后无法检索到内容
+
+优先检查：
+
+- RocketMQ 是否正常消费上传消息
+- Elasticsearch 中 `rag_chunks` 是否有数据
+- 问答使用的 `userId/fileMd5` 是否与上传一致
+
+## 许可证
+
+Apache-2.0
