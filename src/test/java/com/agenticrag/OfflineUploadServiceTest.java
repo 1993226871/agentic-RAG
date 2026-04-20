@@ -3,6 +3,8 @@ package com.agenticrag;
 import com.agenticrag.infra.inmemory.InMemoryMessageQueue;
 import com.agenticrag.infra.inmemory.InMemoryMinioChunkStorage;
 import com.agenticrag.infra.inmemory.InMemoryRedisBitmapStore;
+import com.agenticrag.infra.inmemory.InMemoryUploadFileStore;
+import com.agenticrag.infra.es.InMemoryElasticsearchHybridStore;
 import com.agenticrag.model.UploadCompleteMessage;
 import com.agenticrag.service.OfflineUploadService;
 import org.junit.jupiter.api.Assertions;
@@ -16,7 +18,13 @@ class OfflineUploadServiceTest {
         InMemoryRedisBitmapStore bitmap = new InMemoryRedisBitmapStore();
         InMemoryMinioChunkStorage minio = new InMemoryMinioChunkStorage();
         InMemoryMessageQueue mq = new InMemoryMessageQueue();
-        OfflineUploadService service = new OfflineUploadService(bitmap, minio, mq);
+        OfflineUploadService service = new OfflineUploadService(
+                bitmap,
+                minio,
+                mq,
+                new InMemoryUploadFileStore(),
+                new InMemoryElasticsearchHybridStore()
+        );
 
         String fileId = "file-rag-1";
         String content = "RAG allows combining retrieval and generation for accurate answers.";

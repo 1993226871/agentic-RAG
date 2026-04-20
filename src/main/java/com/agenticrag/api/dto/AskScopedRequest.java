@@ -4,10 +4,8 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 
 public class AskScopedRequest {
-    @NotBlank
     private String userId;
 
-    @NotBlank
     private String password;
 
     @NotBlank
@@ -20,6 +18,9 @@ public class AskScopedRequest {
     private int topK = 3;
 
     private String sessionId = "default";
+
+    private String rewriteMode = "multi";
+    private Boolean answerThinking;
 
     public String getUserId() {
         return userId;
@@ -67,5 +68,21 @@ public class AskScopedRequest {
 
     public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
+    }
+
+    public String getRewriteMode() {
+        return rewriteMode;
+    }
+
+    public void setRewriteMode(String rewriteMode) {
+        this.rewriteMode = rewriteMode;
+    }
+
+    public Boolean getAnswerThinking() {
+        return answerThinking;
+    }
+
+    public void setAnswerThinking(Boolean answerThinking) {
+        this.answerThinking = answerThinking;
     }
 }

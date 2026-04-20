@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agentic RAG 控制台</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    <style>
+        html, body, #app { height: 100%; margin: 0; }
+        body { background: #f5f7f9; }
+        .layout { height: 100%; }
+        .logo {
+            height: 56px;
+            color: #fff;
+            font-size: 17px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            padding-left: 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .topbar {
+            height: 56px;
+            border-bottom: 1px solid #ebeef5;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 18px;
+        }
+        .page { padding: 18px; }
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .answer-box {
+            height: 360px;
+            border: 1px solid #dcdfe6;
+            border-radius: 6px;
+            background: #fafafa;
+            padding: 10px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            overflow-y: scroll;
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <el-container class="layout">
+        <el-aside width="220px" style="background:#304156;">
+            <div class="logo">Agentic RAG</div>
+            <el-menu
+                    :default-active="state.activeMenu"
+                    background-color="#304156"
+                    text-color="#bfcbd9"
+                    active-text-color="#409EFF"
+                    @select="(k) => state.activeMenu = k"
+            >
+                <el-menu-item index="home">首页</el-menu-item>
+                <el-menu-item index="profile">个人主页</el-menu-item>
+                <el-menu-item index="upload">文件上传</el-menu-item>
+                <el-menu-item index="files">我的文件</el-menu-item>
+                <el-menu-item index="qa">在线问答</el-menu-item>
+            </el-menu>
+        </el-aside>
+        <el-container>
+            <el-header class="topbar">
+                <div>
+                    <el-tag type="success">已登录</el-tag>
+                    <span style="margin-left:10px;">{{ state.profile.userId }}</span>
+                </div>
+                <div>
+                    <el-button text type="primary" @click="checkHealth">连接检测</el-button>
+                    <el-button text type="danger" @click="logout">退出登录</el-button>
+                </div>
+            </el-header>
+            <el-main class="page">
+                <el-card v-if="state.activeMenu === 'home'">
+                    <div class="card-title">系统概览</div>
+                    <el-descriptions border :column="1">
+                        <el-descriptions-item label="用户">{{ state.profile.userId }}</el-descriptions-item>
+                        <el-descriptions-item label="昵称">{{ state.profile.nickname || '-' }}</el-descriptions-item>
+                        <el-descriptions-item label="邮箱">{{ state.profile.email || '-' }}</el-descriptions-item>
+                    </el-descriptions>
+                </el-card>
+
+                <el-card v-if="state.activeMenu === 'profile'">
+                    <div class="card-title">个人信息</div>
+                    <el-form label-position="top">
+                        <el-form-item label="用户名">
+                            <el-input v-model="state.profile.userId" disabled />
+                        </el-form-item>
+                        <el-form-item label="昵称">
+                            <el-input v-model="state.profile.nickname" />
+                        </el-form-item>
+                        <el-form-item label="邮箱">
+                            <el-input v-model="state.profile.email" />
+                        </el-form-item>
+                        <el-form-item label="个人简介">
+                            <el-input v-model="state.profile.bio" type="textarea" :rows="3" />
+                        </el-form-item>
+                        <el-button type="primary" @click="saveProfile">保存信息</el-button>
+                    </el-form>
+                </el-card>
+
+                <el-card v-if="state.activeMenu === 'upload'">
+                    <div class="card-title">离线上传</div>
+                    <el-form label-position="top">
+                        <el-form-item label="选择文件">
+                            <input type="file" @change="onFileChange" />
+                        </el-form-item>
+                        <el-form-item label="分片大小（字节）">
+                            <el-input-number v-model="state.upload.chunkSize" :min="64" :max="1048576" />
+                        </el-form-item>
+                        <el-row :gutter="10">
+                            <el-col :span="8"><el-button type="primary" @click="initUpload">初始化</el-button></el-col>
+                            <el-col :span="8"><el-button type="success" @click="uploadChunks">上传分片</el-button></el-col>
+                            <el-col :span="8"><el-button @click="checkChunkStatus">查询状态</el-button></el-col>
+                        </el-row>
+                        <el-alert style="margin-top:12px;" type="info" :closable="false" :title="state.upload.status" />
+                    </el-form>
+                </el-card>
+
+                <el-card v-if="state.activeMenu === 'files'">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <div class="card-title" style="margin-bottom:0;">我的上传文件</div>
+                        <el-button type="primary" plain @click="loadMyFiles">刷新列表</el-button>
+                    </div>
+                    <el-table :data="state.files.items" border style="width:100%;" :row-key="(row) => row.fileId">
+                        <el-table-column prop="fileName" label="文件名" min-width="220" :formatter="formatFileName"></el-table-column>
+                        <el-table-column prop="fileMd5" label="文件MD5" min-width="220" :formatter="formatFileMd5"></el-table-column>
+                        <el-table-column label="状态" width="120">
+                            <template #default="scope">
+                                <el-tag :type="scope.row.completed ? 'success' : 'warning'">
+                                    {{ scope.row.completed ? '已完成' : '上传中' }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="140">
+                            <template #default="scope">
+                                <el-button size="small" type="danger" plain @click="deleteMyFile(scope.row)">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                    <el-empty v-if="state.files.items.length === 0 && !state.files.loading" description="暂无上传记录" />
+                </el-card>
+
+                <el-card v-if="state.activeMenu === 'qa'">
+                    <div class="card-title">在线问答</div>
+                    <el-form label-position="top">
+                        <el-form-item label="会话ID">
+                            <el-input v-model="state.qa.sessionId" />
+                        </el-form-item>
+                        <el-form-item label="问题">
+                            <el-input v-model="state.qa.query" type="textarea" :rows="4" />
+                        </el-form-item>
+                        <el-form-item label="TopK">
+                            <el-input-number v-model="state.qa.topK" :min="1" :max="20" />
+                        </el-form-item>
+                        <el-form-item label="查询重写策略">
+                            <el-radio-group v-model="state.qa.rewriteMode">
+                                <el-radio label="multi">三路重写（默认）</el-radio>
+                                <el-radio label="single">单路重写（仅重写一次）</el-radio>
+                            </el-radio-group>
+                        </el-form-item>
+                        <el-form-item label="最终回答 Thinking">
+                            <el-switch
+                                    v-model="state.qa.answerThinking"
+                                    active-text="开启"
+                                    inactive-text="关闭"
+                            />
+                        </el-form-item>
+                        <el-row :gutter="10">
+                            <el-col :span="12"><el-button type="primary" @click="ask">开始问答</el-button></el-col>
+                            <el-col :span="12"><el-button type="warning" @click="endSession">结束会话并摘要</el-button></el-col>
+                        </el-row>
+                    </el-form>
+                    <div style="margin-top:12px;">回答结果</div>
+                    <div class="answer-box">{{ state.qa.answer }}</div>
+                </el-card>
+            </el-main>
+        </el-container>
+    </el-container>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus"></script>
+<script src="https://unpkg.com/spark-md5@3.0.2/spark-md5.min.js"></script>
+<script>
+    const token = localStorage.getItem("rag_token");
+    if (!token) {
+        window.location.replace("/login.html");
+    }
+
+    const { createApp, reactive } = Vue;
+    createApp({
+        setup() {
+            const savedProfile = JSON.parse(localStorage.getItem("rag_profile") || "{}");
+            const state = reactive({
+                baseUrl: localStorage.getItem("rag_base_url") || window.location.origin,
+                token: token,
+                activeMenu: "home",
+                profile: {
+                    userId: savedProfile.userId || "",
+                    nickname: savedProfile.nickname || "",
+                    email: savedProfile.email || "",
+                    bio: savedProfile.bio || ""
+                },
+                upload: {
+                    file: null,
+                    fileMd5: "",
+                    fileId: "",
+                    totalChunks: 0,
+                    chunkSize: 128,
+                    inited: false,
+                    status: "请先选择文件并初始化任务。"
+                },
+                qa: {
+                    sessionId: "default",
+                    query: "RAG 为什么要结合 BM25 与向量检索？",
+                    topK: 3,
+                    rewriteMode: "multi",
+                    answerThinking: true,
+                    answer: "回答结果会显示在这里。"
+                },
+                files: {
+                    loading: false,
+                    items: []
+                }
+            });
+
+            function authHeaders() {
+                return {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + state.token
+                };
+            }
+
+            async function parseResponse(resp) {
+                const raw = await resp.text();
+                let data = raw;
+                try { data = JSON.parse(raw); } catch (_) {}
+                if (resp.status === 401) {
+                    logout(true);
+                    throw new Error("登录已过期，请重新登录");
+                }
+                if (!resp.ok) throw new Error("HTTP " + resp.status + ": " + JSON.stringify(data));
+                return data;
+            }
+
+            async function get(path) {
+                const resp = await fetch(state.baseUrl.replace(/\/$/, "") + path, {
+                    headers: { "Authorization": "Bearer " + state.token }
+                });
+                return parseResponse(resp);
+            }
+
+            async function post(path, body) {
+                const resp = await fetch(state.baseUrl.replace(/\/$/, "") + path, {
+                    method: "POST",
+                    headers: authHeaders(),
+                    body: JSON.stringify(body)
+                });
+                return parseResponse(resp);
+            }
+
+            async function put(path, body) {
+                const resp = await fetch(state.baseUrl.replace(/\/$/, "") + path, {
+                    method: "PUT",
+                    headers: authHeaders(),
+                    body: JSON.stringify(body)
+                });
+                return parseResponse(resp);
+            }
+
+            function logout(silent) {
+                localStorage.removeItem("rag_token");
+                localStorage.removeItem("rag_profile");
+                if (!silent) {
+                    ElementPlus.ElMessage.success("已退出登录");
+                }
+                window.location.replace("/login.html");
+            }
+
+            async function loadProfile() {
+                const profile = await get("/api/user/profile");
+                state.profile = profile;
+                localStorage.setItem("rag_profile", JSON.stringify(profile));
+            }
+
+            async function saveProfile() {
+                try {
+                    const result = await put("/api/user/profile", {
+                        nickname: state.profile.nickname,
+                        email: state.profile.email,
+                        bio: state.profile.bio
+                    });
+                    state.profile = result.profile;
+                    localStorage.setItem("rag_profile", JSON.stringify(state.profile));
+                    ElementPlus.ElMessage.success("个人信息已保存");
+                } catch (e) {
+                    ElementPlus.ElMessage.error("保存失败: " + e.message);
+                }
+            }
+
+            function onFileChange(event) {
+                state.upload.file = event.target.files[0] || null;
+                state.upload.inited = false;
+                state.upload.status = state.upload.file ? ("已选择文件: " + state.upload.file.name) : "未选择文件。";
+            }
+
+            async function md5OfFile(file) {
+                const buffer = await file.arrayBuffer();
+                return SparkMD5.ArrayBuffer.hash(buffer);
+            }
+
+            async function initUpload() {
+                try {
+                    if (!state.upload.file) throw new Error("请先选择文件");
+                    const chunkSize = Number(state.upload.chunkSize);
+                    state.upload.totalChunks = Math.ceil(state.upload.file.size / chunkSize);
+                    state.upload.fileMd5 = await md5OfFile(state.upload.file);
+                    state.upload.fileId = state.profile.userId + ":" + state.upload.fileMd5;
+                    await post("/api/upload/init", {
+                        fileId: state.upload.fileId,
+                        totalChunks: state.upload.totalChunks,
+                        originalFileName: state.upload.file.name
+                    });
+                    state.upload.inited = true;
+                    state.upload.status = "初始化成功，共 " + state.upload.totalChunks + " 个分片。";
+                    ElementPlus.ElMessage.success("上传任务初始化成功");
+                } catch (e) {
+                    ElementPlus.ElMessage.error("初始化失败: " + e.message);
+                }
+            }
+
+            async function uploadChunks() {
+                try {
+                    if (!state.upload.inited) {
+                        await initUpload();
+                        if (!state.upload.inited) return;
+                    }
+                    const chunkSize = Number(state.upload.chunkSize);
+                    for (let i = 0; i < state.upload.totalChunks; i++) {
+                        const start = i * chunkSize;
+                        const end = Math.min(start + chunkSize, state.upload.file.size);
+                        const blob = state.upload.file.slice(start, end);
+                        const form = new FormData();
+                        form.append("fileId", state.upload.fileId);
+                        form.append("totalChunks", String(state.upload.totalChunks));
+                        form.append("chunkIndex", String(i));
+                        form.append("file", blob, state.upload.file.name + ".part" + i);
+                        const resp = await fetch(state.baseUrl.replace(/\/$/, "") + "/api/upload/chunk", {
+                            method: "POST",
+                            headers: { "Authorization": "Bearer " + state.token },
+                            body: form
+                        });
+                        if (!resp.ok) throw new Error("分片 " + i + " 上传失败");
+                    }
+                    state.upload.status = "分片上传完成，系统正在异步入库。";
+                    ElementPlus.ElMessage.success("上传完成");
+                    state.activeMenu = "files";
+                    state.upload.status = "上传成功：文件名=" + state.upload.file.name + "，MD5=" + state.upload.fileMd5 + "，正在等待异步入库。";
+                    await waitAndRefreshFileList(state.upload.fileId);
+                } catch (e) {
+                    ElementPlus.ElMessage.error("上传失败: " + e.message);
+                }
+            }
+
+            async function loadMyFiles() {
+                try {
+                    state.files.loading = true;
+                    const result = await get("/api/upload/my-files");
+                    const files = Array.isArray(result.files) ? result.files : [];
+                    state.files.items = files.map(normalizeFileRow);
+                } catch (e) {
+                    ElementPlus.ElMessage.error("获取文件列表失败: " + e.message);
+                } finally {
+                    state.files.loading = false;
+                }
+            }
+
+            function normalizeFileRow(file) {
+                const row = Object.assign({}, file || {});
+                if ((!row.fileMd5 || row.fileMd5 === "-") && row.fileId && row.fileId.indexOf(":") > 0) {
+                    row.fileMd5 = row.fileId.split(":")[1];
+                }
+                if (!row.fileName || row.fileName.trim() === "") {
+                    row.fileName = row.fileMd5 ? ("unnamed-" + row.fileMd5.substring(0, 8)) : "(未记录文件名)";
+                }
+                return row;
+            }
+
+            function formatFileName(row) {
+                if (!row || !row.fileName) {
+                    return "(未记录文件名)";
+                }
+                return row.fileName;
+            }
+
+            function formatFileMd5(row) {
+                if (!row || !row.fileMd5) {
+                    return "-";
+                }
+                return row.fileMd5;
+            }
+
+            async function waitAndRefreshFileList(fileId) {
+                for (let i = 0; i < 15; i++) {
+                    await loadMyFiles();
+                    const found = state.files.items.some(function (item) { return item.fileId === fileId; });
+                    if (found) {
+                        return;
+                    }
+                    await new Promise(function (resolve) { setTimeout(resolve, 1000); });
+                }
+            }
+
+            async function deleteMyFile(file) {
+                try {
+                    if (!file || !file.fileMd5) return;
+                    const ok = window.confirm("确认删除文件「" + (file.fileName || file.fileMd5) + "」吗？");
+                    if (!ok) return;
+                    const resp = await fetch(state.baseUrl.replace(/\/$/, "") + "/api/upload/my-files?fileMd5=" + encodeURIComponent(file.fileMd5), {
+                        method: "DELETE",
+                        headers: { "Authorization": "Bearer " + state.token }
+                    });
+                    const data = await parseResponse(resp);
+                    if (!data.ok) {
+                        throw new Error("删除失败，文件不存在或无权限");
+                    }
+                    ElementPlus.ElMessage.success("删除成功");
+                    await loadMyFiles();
+                } catch (e) {
+                    ElementPlus.ElMessage.error("删除失败: " + e.message);
+                }
+            }
+
+            async function checkChunkStatus() {
+                try {
+                    if (!state.upload.fileId) throw new Error("请先初始化任务");
+                    const result = await get("/api/upload/status?fileId=" + encodeURIComponent(state.upload.fileId) + "&chunkIndex=1");
+                    state.upload.status = "分片状态: " + JSON.stringify(result);
+                } catch (e) {
+                    ElementPlus.ElMessage.warning("状态查询失败: " + e.message);
+                }
+            }
+
+            async function ask() {
+                try {
+                    const result = await post("/api/qa/ask", {
+                        query: state.qa.query,
+                        topK: Number(state.qa.topK),
+                        rewriteMode: state.qa.rewriteMode,
+                        answerThinking: Boolean(state.qa.answerThinking)
+                    });
+                    state.qa.answer = result.text || "问答完成，但没有文本答案。";
+                    ElementPlus.ElMessage.success("问答完成");
+                } catch (e) {
+                    ElementPlus.ElMessage.error("问答失败: " + e.message);
+                }
+            }
+
+            async function endSession() {
+                try {
+                    const result = await post("/api/qa/end-session", { sessionId: state.qa.sessionId });
+                    ElementPlus.ElMessage.success(result.summarized ? "会话已摘要并结束" : "会话已结束（无新增摘要）");
+                } catch (e) {
+                    ElementPlus.ElMessage.error("结束会话失败: " + e.message);
+                }
+            }
+
+            async function checkHealth() {
+                try {
+                    const data = await get("/api/health");
+                    ElementPlus.ElMessage.success("连接正常: " + JSON.stringify(data));
+                } catch (e) {
+                    ElementPlus.ElMessage.error("连接失败: " + e.message);
+                }
+            }
+
+            loadProfile().catch(function () {
+                logout(true);
+            });
+            loadMyFiles().catch(function () {});
+
+            return {
+                state,
+                logout,
+                saveProfile,
+                onFileChange,
+                initUpload,
+                uploadChunks,
+                loadMyFiles,
+                deleteMyFile,
+                formatFileName,
+                formatFileMd5,
+                checkChunkStatus,
+                ask,
+                endSession,
+                checkHealth
+            };
+        }
+    }).use(ElementPlus).mount("#app");
+</script>
+</body>
+</html>

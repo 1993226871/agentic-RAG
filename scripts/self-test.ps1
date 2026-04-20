@@ -22,6 +22,14 @@ Write-Step "1. 健康检查"
 $health = Invoke-RestMethod -Uri "$BaseUrl/api/health" -Method Get
 Write-Host ("Health: " + ($health | ConvertTo-Json -Compress))
 
+Write-Step "1.1 用户登录"
+$loginBody = @{ userId = "root"; password = "123456" } | ConvertTo-Json
+$loginResp = Invoke-RestMethod -Uri "$BaseUrl/api/auth/login" -Method Post -ContentType "application/json" -Body $loginBody
+if (-not $loginResp.ok) {
+    throw "登录失败，无法继续自测"
+}
+$authHeaders = @{ Authorization = "Bearer " + $loginResp.token }
+
 $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $FilePath))
 $totalChunks = [Math]::Ceiling($bytes.Length / $ChunkSize)
 
@@ -68,7 +76,7 @@ if ($Mode -eq "mock") {
 
 Write-Step "6. 在线问答"
 $askBody = @{ query = $Query; topK = 3 } | ConvertTo-Json
-$askResp = Invoke-RestMethod -Uri "$BaseUrl/api/qa/ask" -Method Post -ContentType "application/json" -Body $askBody
+$askResp = Invoke-RestMethod -Uri "$BaseUrl/api/qa/ask" -Method Post -Headers $authHeaders -ContentType "application/json" -Body $askBody
 Write-Host ("QA: " + ($askResp | ConvertTo-Json -Depth 6))
 
 Write-Step "完成：系统链路已跑完"

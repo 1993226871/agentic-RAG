@@ -150,7 +150,8 @@ public class RagProperties {
 
     public static class Es {
         private String index = "rag_chunks";
-        private int vectorDims = 8;
+        private String fileIndex = "rag_files";
+        private int vectorDims = 1024;
 
         public String getIndex() {
             return index;
@@ -167,13 +168,21 @@ public class RagProperties {
         public void setVectorDims(int vectorDims) {
             this.vectorDims = vectorDims;
         }
+
+        public String getFileIndex() {
+            return fileIndex;
+        }
+
+        public void setFileIndex(String fileIndex) {
+            this.fileIndex = fileIndex;
+        }
     }
 
     public static class Embedding {
         private String provider = "alibaba";
         private String endpoint;
         private String apiKey;
-        private String model = "qwen3-vl-embedding";
+        private String model = "text-embedding-v4";
 
         public String getProvider() {
             return provider;
@@ -300,7 +309,7 @@ public class RagProperties {
         private int historyTopK = 3;
         private int summarizeEveryTurns = 20;
         private String summaryEndpoint = "";
-        private String summaryModel = "qwen-max";
+        private String summaryModel = "qwen3.6-plus";
         private String apiKey = "";
 
         public String getIndex() {
@@ -357,8 +366,10 @@ public class RagProperties {
         private int maxSteps = 5;
         private int docTopK = 3;
         private int memoryTopK = 3;
-        private String plannerEndpoint = "";
-        private String plannerModel = "qwen-plus";
+        private String plannerEndpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+        private String plannerModel = "qwen3.5-flash";
+        private String answerModel = "qwen3.6-plus";
+        private boolean answerThinking = true;
         private String apiKey = "";
 
         public boolean isEnabled() {
@@ -407,6 +418,22 @@ public class RagProperties {
 
         public void setPlannerModel(String plannerModel) {
             this.plannerModel = plannerModel;
+        }
+
+        public String getAnswerModel() {
+            return answerModel;
+        }
+
+        public void setAnswerModel(String answerModel) {
+            this.answerModel = answerModel;
+        }
+
+        public boolean isAnswerThinking() {
+            return answerThinking;
+        }
+
+        public void setAnswerThinking(boolean answerThinking) {
+            this.answerThinking = answerThinking;
         }
 
         public String getApiKey() {

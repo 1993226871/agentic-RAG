@@ -10,6 +10,8 @@ public class InitUploadRequest {
     @Min(1)
     private int totalChunks;
 
+    private String originalFileName;
+
     public String getFileId() {
         return fileId;
     }
@@ -24,5 +26,13 @@ public class InitUploadRequest {
 
     public void setTotalChunks(int totalChunks) {
         this.totalChunks = totalChunks;
+    }
+
+    public String getOriginalFileName() {
+        return originalFileName;
+    }
+
+    public void setOriginalFileName(String originalFileName) {
+        this.originalFileName = originalFileName;
     }
 }

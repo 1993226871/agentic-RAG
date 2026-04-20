@@ -6,6 +6,7 @@ import com.agenticrag.infra.embedding.MockAliEmbeddingClient;
 import com.agenticrag.infra.agent.HeuristicAgentPlanner;
 import com.agenticrag.infra.agent.LangChain4jAgentPlanner;
 import com.agenticrag.infra.es.ElasticsearchHybridStore;
+import com.agenticrag.infra.es.ElasticsearchUploadFileStore;
 import com.agenticrag.infra.es.InMemoryElasticsearchHybridStore;
 import com.agenticrag.infra.memory.ElasticsearchConversationMemoryStore;
 import com.agenticrag.infra.memory.InMemoryConversationMemoryStore;
@@ -14,6 +15,7 @@ import com.agenticrag.infra.memory.MockConversationSummarizer;
 import com.agenticrag.infra.inmemory.InMemoryMessageQueue;
 import com.agenticrag.infra.inmemory.InMemoryMinioChunkStorage;
 import com.agenticrag.infra.inmemory.InMemoryRedisBitmapStore;
+import com.agenticrag.infra.inmemory.InMemoryUploadFileStore;
 import com.agenticrag.infra.minio.MinioChunkStorageImpl;
 import com.agenticrag.infra.redis.RedisBitmapStoreImpl;
 import com.agenticrag.infra.rerank.BgeHttpReranker;
@@ -34,6 +36,7 @@ import com.agenticrag.ports.RedisBitmapStore;
 import com.agenticrag.ports.Reranker;
 import com.agenticrag.ports.TextChunker;
 import com.agenticrag.ports.TikaParser;
+import com.agenticrag.ports.UploadFileStore;
 import io.minio.MinioClient;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -129,6 +132,12 @@ public class InfraConfig {
         return new InMemoryElasticsearchHybridStore();
     }
 
+    @Bean
+    @ConditionalOnProperty(name = "rag.mock-enabled", havingValue = "true", matchIfMissing = true)
+    public UploadFileStore mockUploadFileStore() {
+        return new InMemoryUploadFileStore();
+    }
+
     @Bean(destroyMethod = "close")
     @ConditionalOnProperty(name = "rag.mock-enabled", havingValue = "false")
     public RestHighLevelClient restHighLevelClient(@Value("${spring.elasticsearch.uris}") String esUris) {
@@ -140,6 +149,12 @@ public class InfraConfig {
     @ConditionalOnProperty(name = "rag.mock-enabled", havingValue = "false")
     public HybridSearchStore hybridSearchStore(RestHighLevelClient client, RagProperties properties) {
         return new ElasticsearchHybridStore(client, properties);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "rag.mock-enabled", havingValue = "false")
+    public UploadFileStore uploadFileStore(RestHighLevelClient client, RagProperties properties) {
+        return new ElasticsearchUploadFileStore(client, properties);
     }
 
     @Bean
@@ -203,6 +218,7 @@ public class InfraConfig {
         if (baseUrl == null || baseUrl.trim().isEmpty()) {
             return new HeuristicAgentPlanner();
         }
+        baseUrl = normalizeOpenAiBaseUrl(baseUrl);
         String apiKey = properties.getAgent().getApiKey();
         if (apiKey == null || apiKey.trim().isEmpty()) {
             apiKey = "EMPTY_API_KEY";
@@ -214,5 +230,16 @@ public class InfraConfig {
                 .temperature(0.0)
                 .build();
         return new LangChain4jAgentPlanner(model, properties);
+    }
+
+    private String normalizeOpenAiBaseUrl(String configuredUrl) {
+        String url = configuredUrl == null ? "" : configuredUrl.trim();
+        if (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        if (url.endsWith("/chat/completions")) {
+            return url.substring(0, url.length() - "/chat/completions".length());
+        }
+        return url;
     }
 }

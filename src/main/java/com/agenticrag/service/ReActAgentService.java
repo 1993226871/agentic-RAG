@@ -32,8 +32,24 @@ public class ReActAgentService {
     }
 
     public QaResult askScoped(String query, int topK, String fileId, String userId, String sessionId) {
+        return askScoped(query, topK, fileId, userId, sessionId, OnlineQaService.REWRITE_MODE_MULTI);
+    }
+
+    public QaResult askScoped(String query, int topK, String fileId, String userId, String sessionId, String rewriteMode) {
+        return askScoped(query, topK, fileId, userId, sessionId, rewriteMode, null);
+    }
+
+    public QaResult askScoped(
+            String query,
+            int topK,
+            String fileId,
+            String userId,
+            String sessionId,
+            String rewriteMode,
+            Boolean answerThinking
+    ) {
         if (!enabled) {
-            return onlineQaService.askScoped(query, topK, fileId, userId, sessionId);
+            return onlineQaService.askScoped(query, topK, fileId, userId, sessionId, rewriteMode, answerThinking);
         }
         Map<String, RetrievedDoc> evidence = new LinkedHashMap<String, RetrievedDoc>();
         Map<String, MemorySummaryDocument> memories = new LinkedHashMap<String, MemorySummaryDocument>();
@@ -60,7 +76,7 @@ public class ReActAgentService {
             }
             if (AgentDecision.ACTION_RETRIEVE_DOCS.equals(decision.getAction())) {
                 int perRoundTopK = Math.max(topK, docTopK);
-                List<RetrievedDoc> docs = onlineQaService.retrieveScopedKnowledge(actionQuery, perRoundTopK, fileId);
+                List<RetrievedDoc> docs = onlineQaService.retrieveScopedKnowledge(actionQuery, perRoundTopK, userId, fileId, rewriteMode);
                 for (RetrievedDoc doc : docs) {
                     evidence.put(doc.document().chunkId(), doc);
                 }
@@ -78,15 +94,30 @@ public class ReActAgentService {
 
         List<RetrievedDoc> contexts = new ArrayList<RetrievedDoc>(evidence.values());
         List<MemorySummaryDocument> memoryList = new ArrayList<MemorySummaryDocument>(memories.values());
-        if (finalAnswer.trim().isEmpty()) {
-            finalAnswer = onlineQaService.composeAnswerForAgent(query, contexts, memoryList);
+        String synthesizedAnswer = onlineQaService.composeAnswerForAgent(query, contexts, memoryList, answerThinking);
+        if (synthesizedAnswer != null && !synthesizedAnswer.trim().isEmpty()) {
+            finalAnswer = synthesizedAnswer;
+        } else if (finalAnswer.trim().isEmpty()) {
+            finalAnswer = "未检索到与问题相关的知识片段。";
         }
         onlineQaService.recordTurn(userId, sessionId, query, finalAnswer);
         return new QaResult(query, contexts, finalAnswer, traces, usedSteps, stopReason);
     }
 
     public QaResult ask(String query, int topK) {
-        return askScoped(query, topK, null, "anonymous", "default");
+        return ask(query, topK, "anonymous", OnlineQaService.REWRITE_MODE_MULTI);
+    }
+
+    public QaResult ask(String query, int topK, String userId) {
+        return ask(query, topK, userId, OnlineQaService.REWRITE_MODE_MULTI);
+    }
+
+    public QaResult ask(String query, int topK, String userId, String rewriteMode) {
+        return ask(query, topK, userId, rewriteMode, null);
+    }
+
+    public QaResult ask(String query, int topK, String userId, String rewriteMode, Boolean answerThinking) {
+        return askScoped(query, topK, null, userId, "default", rewriteMode, answerThinking);
     }
 
     private String buildScratchpad(Map<String, RetrievedDoc> evidence, Map<String, MemorySummaryDocument> memories) {

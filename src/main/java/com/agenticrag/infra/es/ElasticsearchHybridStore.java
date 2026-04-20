@@ -16,6 +16,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.query.MatchQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.reindex.DeleteByQueryRequest;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
@@ -94,6 +95,17 @@ public class ElasticsearchHybridStore implements HybridSearchStore {
             return (int) response.getCount();
         } catch (Exception e) {
             throw new RuntimeException("Elasticsearch count query failed", e);
+        }
+    }
+
+    @Override
+    public void deleteByFileId(String fileId) {
+        try {
+            DeleteByQueryRequest request = new DeleteByQueryRequest(indexName);
+            request.setQuery(QueryBuilders.termQuery("fileId", fileId));
+            client.deleteByQuery(request, RequestOptions.DEFAULT);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to delete chunks by fileId", e);
         }
     }
 

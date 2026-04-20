@@ -3,9 +3,13 @@ package com.agenticrag.infra.minio;
 import com.agenticrag.ports.MinioChunkStorage;
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
+import io.minio.ListObjectsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import io.minio.Result;
+import io.minio.messages.Item;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -49,6 +53,22 @@ public class MinioChunkStorageImpl implements MinioChunkStorage {
     public byte[] getMergedObject(String objectKey) {
         ensureBucket();
         return readObject(objectKey);
+    }
+
+    @Override
+    public void deleteByFileId(String fileId) {
+        ensureBucket();
+        try {
+            Iterable<Result<Item>> results = minioClient.listObjects(
+                    ListObjectsArgs.builder().bucket(bucket).prefix(fileId + "/").recursive(true).build()
+            );
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                minioClient.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(item.objectName()).build());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to delete file objects from MinIO: " + fileId, e);
+        }
     }
 
     private void ensureBucket() {

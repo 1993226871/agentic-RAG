@@ -31,14 +31,15 @@ rag:
     consumer-group: rag-consumer-group
   es:
     index: rag_chunks
-    vector-dims: 8
+    file-index: rag_files
+    vector-dims: 1024
   search:
     rrf-k: 60
   embedding:
     provider: alibaba
     api-key: ${DASHSCOPE_API_KEY:}
-    endpoint: https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding
-    model: qwen3-vl-embedding
+    endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+    model: text-embedding-v4
   rerank:
     provider: qwen
     endpoint: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
@@ -46,22 +47,27 @@ rag:
     model: qwen3-vl-rerank
   rewrite:
     provider: qwen
-    endpoint: ""
-    api-key: ""
+    endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+    api-key: ${DASHSCOPE_API_KEY:}
     model: qwen3.5-flash
     variants: 3
   memory:
     index: rag_memory
     history-top-k: 3
     summarize-every-turns: 20
-    summary-endpoint: ""
-    summary-model: qwen-max
-    api-key: ""
+    summary-endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+    summary-model: qwen3.5-flash
+    api-key: ${DASHSCOPE_API_KEY:}
   agent:
     enabled: true
     max-steps: 5
     doc-top-k: 3
     memory-top-k: 3
-    planner-endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1
+    planner-endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
     planner-model: qwen3.5-flash
+    answer-model: qwen3.6-plus
+    answer-thinking: true
     api-key: ${DASHSCOPE_API_KEY:}
+  auth:
+    jwt-secret: ${JWT_SECRET:change-this-secret-to-32chars-minimum!!}
+    token-expire-seconds: 86400

@@ -1,12 +1,8 @@
 package com.agenticrag.api.dto;
 
-import javax.validation.constraints.NotBlank;
-
 public class EndSessionRequest {
-    @NotBlank
     private String userId;
 
-    @NotBlank
     private String password;
 
     private String sessionId = "default";

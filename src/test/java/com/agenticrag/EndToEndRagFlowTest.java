@@ -6,6 +6,7 @@ import com.agenticrag.infra.es.InMemoryElasticsearchHybridStore;
 import com.agenticrag.infra.inmemory.InMemoryMessageQueue;
 import com.agenticrag.infra.inmemory.InMemoryMinioChunkStorage;
 import com.agenticrag.infra.inmemory.InMemoryRedisBitmapStore;
+import com.agenticrag.infra.inmemory.InMemoryUploadFileStore;
 import com.agenticrag.infra.rerank.MockBgeReranker;
 import com.agenticrag.infra.tika.TikaTextParser;
 import com.agenticrag.model.QaResult;
@@ -26,7 +27,13 @@ class EndToEndRagFlowTest {
         InMemoryElasticsearchHybridStore store = new InMemoryElasticsearchHybridStore();
         MockAliEmbeddingClient embedding = new MockAliEmbeddingClient(8);
 
-        OfflineUploadService uploadService = new OfflineUploadService(bitmap, minio, mq);
+        OfflineUploadService uploadService = new OfflineUploadService(
+                bitmap,
+                minio,
+                mq,
+                new InMemoryUploadFileStore(),
+                store
+        );
         AsyncIngestionConsumer consumer = new AsyncIngestionConsumer(
                 mq, minio, new TikaTextParser(), new SimpleLangchain4jChunker(50, 10), embedding, store
         );

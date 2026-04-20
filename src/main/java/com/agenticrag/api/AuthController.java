@@ -2,7 +2,9 @@ package com.agenticrag.api;
 
 import com.agenticrag.api.dto.LoginRequest;
 import com.agenticrag.api.dto.RegisterRequest;
+import com.agenticrag.model.UserProfile;
 import com.agenticrag.service.AuthService;
+import com.agenticrag.service.JwtService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,9 +20,11 @@ import java.util.Map;
 @Validated
 public class AuthController {
     private final AuthService authService;
+    private final JwtService jwtService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, JwtService jwtService) {
         this.authService = authService;
+        this.jwtService = jwtService;
     }
 
     @PostMapping("/login")
@@ -29,6 +33,12 @@ public class AuthController {
         Map<String, Object> result = new HashMap<String, Object>();
         result.put("ok", ok);
         result.put("userId", request.getUserId());
+        if (ok) {
+            String token = jwtService.generateToken(request.getUserId());
+            UserProfile profile = authService.getProfile(request.getUserId());
+            result.put("token", token);
+            result.put("profile", profile);
+        }
         return result;
     }
 

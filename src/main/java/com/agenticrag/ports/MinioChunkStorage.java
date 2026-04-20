@@ -6,4 +6,6 @@ public interface MinioChunkStorage {
     byte[] mergeChunks(String fileId, int totalChunks);
 
     byte[] getMergedObject(String objectKey);
+
+    void deleteByFileId(String fileId);
 }

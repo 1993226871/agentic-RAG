@@ -23,6 +23,7 @@ $loginBody = @{ userId = "root"; password = "123456" } | ConvertTo-Json
 $login = Invoke-RestMethod -Uri "$BaseUrl/api/auth/login" -Method Post -ContentType "application/json" -Body $loginBody
 Write-Host ("login: " + ($login | ConvertTo-Json -Compress))
 if (-not $login.ok) { throw "root login failed" }
+$authHeaders = @{ Authorization = "Bearer " + $login.token }
 
 Step "3) prepare file context"
 $fullPath = (Resolve-Path $FilePath).Path
@@ -71,7 +72,7 @@ for ($retry = 1; $retry -le 12; $retry++) {
         query = "RAG why combine BM25 and vector retrieval?"
         topK = 3
     } | ConvertTo-Json
-    $ask = Invoke-RestMethod -Uri "$BaseUrl/api/qa/ask-scoped" -Method Post -ContentType "application/json" -Body $askBody
+    $ask = Invoke-RestMethod -Uri "$BaseUrl/api/qa/ask-scoped" -Method Post -Headers $authHeaders -ContentType "application/json" -Body $askBody
     $contexts = @($ask.contexts)
     Write-Host ("retry#$retry contexts=" + $contexts.Count)
     if ($contexts.Count -gt 0) {

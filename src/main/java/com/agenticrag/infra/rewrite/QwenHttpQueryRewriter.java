@@ -2,6 +2,8 @@ package com.agenticrag.infra.rewrite;
 
 import com.agenticrag.config.RagProperties;
 import com.agenticrag.ports.QueryRewriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -12,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 public class QwenHttpQueryRewriter implements QueryRewriter {
+    private static final Logger log = LoggerFactory.getLogger(QwenHttpQueryRewriter.class);
     private final RagProperties properties;
     private final RestTemplate restTemplate;
     private final QueryRewriter fallback = new MockQueryRewriter();
@@ -23,9 +26,14 @@ public class QwenHttpQueryRewriter implements QueryRewriter {
 
     @Override
     public List<String> rewrite(String query, int variants) {
+        long start = System.currentTimeMillis();
+        String model = properties.getRewrite().getModel();
         String endpoint = properties.getRewrite().getEndpoint();
         if (endpoint == null || endpoint.trim().isEmpty()) {
-            return fallback.rewrite(query, variants);
+            List<String> fallbackResult = fallback.rewrite(query, variants);
+            log.info("[MODEL][rewrite] model={} elapsedMs={} variants={} status=fallback_missing_config returned={}",
+                    model, System.currentTimeMillis() - start, variants, fallbackResult.size());
+            return fallbackResult;
         }
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -34,17 +42,33 @@ public class QwenHttpQueryRewriter implements QueryRewriter {
                 headers.setBearerAuth(properties.getRewrite().getApiKey().trim());
             }
             String prompt = buildPrompt(query, variants);
+            String url = normalizeChatCompletionsUrl(endpoint);
             Map<String, Object> payload = mapOf(
                     "model", properties.getRewrite().getModel(),
-                    "prompt", prompt,
-                    "variants", variants
+                    "messages", java.util.Arrays.asList(
+                            mapOf("role", "system", "content", "你是检索优化助手，请按要求返回改写结果。"),
+                            mapOf("role", "user", "content", prompt)
+                    ),
+                    "temperature", 0.3
             );
+            payload.put("enable_thinking", false);
             @SuppressWarnings("unchecked")
-            Map<String, Object> response = restTemplate.postForObject(endpoint, new HttpEntity<Map<String, Object>>(payload, headers), Map.class);
+            Map<String, Object> response = restTemplate.postForObject(url, new HttpEntity<Map<String, Object>>(payload, headers), Map.class);
             List<String> parsed = parseRewrites(response);
-            return parsed.isEmpty() ? fallback.rewrite(query, variants) : parsed;
+            if (parsed.isEmpty()) {
+                List<String> fallbackResult = fallback.rewrite(query, variants);
+                log.info("[MODEL][rewrite] model={} elapsedMs={} variants={} status=fallback_empty_result returned={}",
+                        model, System.currentTimeMillis() - start, variants, fallbackResult.size());
+                return fallbackResult;
+            }
+            log.info("[MODEL][rewrite] model={} elapsedMs={} variants={} status=success returned={}",
+                    model, System.currentTimeMillis() - start, variants, parsed.size());
+            return parsed;
         } catch (Exception e) {
-            return fallback.rewrite(query, variants);
+            List<String> fallbackResult = fallback.rewrite(query, variants);
+            log.warn("[MODEL][rewrite] model={} elapsedMs={} variants={} status=fallback_exception error={} returned={}",
+                    model, System.currentTimeMillis() - start, variants, e.getMessage(), fallbackResult.size());
+            return fallbackResult;
         }
     }
 
@@ -60,6 +84,28 @@ public class QwenHttpQueryRewriter implements QueryRewriter {
         List<String> rewrites = new ArrayList<String>();
         if (response == null) {
             return rewrites;
+        }
+        Object choicesObj = response.get("choices");
+        if (choicesObj instanceof List && !((List<?>) choicesObj).isEmpty()) {
+            Object first = ((List<?>) choicesObj).get(0);
+            if (first instanceof Map) {
+                Object messageObj = ((Map<?, ?>) first).get("message");
+                if (messageObj instanceof Map) {
+                    Object contentObj = ((Map<?, ?>) messageObj).get("content");
+                    if (contentObj != null) {
+                        String[] lines = String.valueOf(contentObj).split("\\r?\\n");
+                        for (String line : lines) {
+                            String cleaned = line.replaceFirst("^\\s*[-\\d\\.\\)]\\s*", "").trim();
+                            if (!cleaned.isEmpty()) {
+                                rewrites.add(cleaned);
+                            }
+                        }
+                        if (!rewrites.isEmpty()) {
+                            return rewrites;
+                        }
+                    }
+                }
+            }
         }
         Object candidates = response.get("rewrites");
         if (candidates instanceof List) {
@@ -87,11 +133,29 @@ public class QwenHttpQueryRewriter implements QueryRewriter {
         return rewrites;
     }
 
+    private String normalizeChatCompletionsUrl(String endpoint) {
+        String url = endpoint == null ? "" : endpoint.trim();
+        if (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        if (!url.endsWith("/chat/completions")) {
+            url = url + "/chat/completions";
+        }
+        return url;
+    }
+
     private Map<String, Object> mapOf(String k1, Object v1, String k2, Object v2, String k3, Object v3) {
         java.util.Map<String, Object> out = new java.util.HashMap<String, Object>();
         out.put(k1, v1);
         out.put(k2, v2);
         out.put(k3, v3);
+        return out;
+    }
+
+    private Map<String, String> mapOf(String k1, String v1, String k2, String v2) {
+        java.util.Map<String, String> out = new java.util.HashMap<String, String>();
+        out.put(k1, v1);
+        out.put(k2, v2);
         return out;
     }
 }

@@ -2,6 +2,9 @@ services:
   redis:
     image: redis:7.2
     container_name: rag-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
     ports:
       - "6379:6379"
 
@@ -12,6 +15,8 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -25,6 +30,8 @@ services:
       discovery.type: single-node
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
 
@@ -45,6 +52,15 @@ services:
       - rocketmq-namesrv
     volumes:
       - ./docker/rocketmq/broker.conf:/home/rocketmq/rocketmq-5.3.1/conf/broker.conf
+      - rmq-store:/home/rocketmq/store
+      - rmq-logs:/home/rocketmq/logs
     ports:
       - "10911:10911"
       - "10909:10909"
+
+volumes:
+  redis-data:
+  minio-data:
+  es-data:
+  rmq-store:
+  rmq-logs:

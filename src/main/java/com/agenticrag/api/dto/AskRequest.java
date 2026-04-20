@@ -10,6 +10,9 @@ public class AskRequest {
     @Min(1)
     private int topK = 3;
 
+    private String rewriteMode = "multi";
+    private Boolean answerThinking;
+
     public String getQuery() {
         return query;
     }
@@ -24,5 +27,21 @@ public class AskRequest {
 
     public void setTopK(int topK) {
         this.topK = topK;
+    }
+
+    public String getRewriteMode() {
+        return rewriteMode;
+    }
+
+    public void setRewriteMode(String rewriteMode) {
+        this.rewriteMode = rewriteMode;
+    }
+
+    public Boolean getAnswerThinking() {
+        return answerThinking;
+    }
+
+    public void setAnswerThinking(Boolean answerThinking) {
+        this.answerThinking = answerThinking;
     }
 }

@@ -41,6 +41,12 @@ public class InMemoryMinioChunkStorage implements MinioChunkStorage {
         return mergedBucket.get(objectKey);
     }
 
+    @Override
+    public void deleteByFileId(String fileId) {
+        chunkBucket.remove(fileId);
+        mergedBucket.remove(mergedKey(fileId));
+    }
+
     public static String mergedKey(String fileId) {
         return fileId + "/merged";
     }

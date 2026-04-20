@@ -7,6 +7,7 @@ public class QaResult {
     private String query;
     private List<RetrievedDoc> contexts;
     private String answer;
+    private String text;
     private List<AgentTraceStep> agentTrace;
     private int stepsUsed;
     private String stopReason;
@@ -18,12 +19,14 @@ public class QaResult {
         this.query = query;
         this.contexts = contexts;
         this.answer = answer;
+        this.text = answer;
     }
 
     public QaResult(String query, List<RetrievedDoc> contexts, String answer, List<AgentTraceStep> agentTrace, int stepsUsed, String stopReason) {
         this.query = query;
         this.contexts = contexts;
         this.answer = answer;
+        this.text = answer;
         this.agentTrace = agentTrace;
         this.stepsUsed = stepsUsed;
         this.stopReason = stopReason;
@@ -63,6 +66,16 @@ public class QaResult {
 
     public void setAnswer(String answer) {
         this.answer = answer;
+        this.text = answer;
+    }
+
+    public String getText() {
+        return text;
+    }
+
+    public void setText(String text) {
+        this.text = text;
+        this.answer = text;
     }
 
     public List<AgentTraceStep> getAgentTrace() {

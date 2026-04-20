@@ -90,6 +90,14 @@ public class InMemoryElasticsearchHybridStore implements HybridSearchStore {
                 .count();
     }
 
+    @Override
+    public void deleteByFileId(String fileId) {
+        if (fileId == null) {
+            return;
+        }
+        docs.removeIf(doc -> fileId.equals(doc.fileId()));
+    }
+
     private static String[] tokenize(String text) {
         if (text == null || text.trim().isEmpty()) {
             return new String[0];

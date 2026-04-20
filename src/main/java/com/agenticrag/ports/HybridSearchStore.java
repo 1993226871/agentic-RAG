@@ -13,4 +13,6 @@ public interface HybridSearchStore {
     List<RetrievedDoc> bm25Search(String query, int topK);
 
     int countByFileId(String fileId);
+
+    void deleteByFileId(String fileId);
 }

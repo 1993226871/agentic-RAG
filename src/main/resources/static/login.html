@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agentic RAG 登录</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    <style>
+        html, body, #app { height: 100%; margin: 0; }
+        body {
+            background: radial-gradient(circle at top, #dbeafe 0%, #f5f7f9 45%, #f5f7f9 100%);
+            font-family: "Helvetica Neue", Arial, "PingFang SC", sans-serif;
+        }
+        .wrap {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            width: 430px;
+        }
+    </style>
+</head>
+<body>
+<div id="app" class="wrap">
+    <el-card class="card">
+        <template #header>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span>Agentic RAG 管理台</span>
+                <el-tag type="info">默认 root / 123456</el-tag>
+            </div>
+        </template>
+        <el-form label-position="top">
+            <el-form-item label="用户名">
+                <el-input v-model="state.form.userId" />
+            </el-form-item>
+            <el-form-item label="密码">
+                <el-input v-model="state.form.password" show-password @keyup.enter="login" />
+            </el-form-item>
+            <el-row :gutter="10">
+                <el-col :span="12"><el-button type="primary" style="width:100%;" @click="login">登录</el-button></el-col>
+                <el-col :span="12"><el-button style="width:100%;" @click="register">注册</el-button></el-col>
+            </el-row>
+        </el-form>
+    </el-card>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus"></script>
+<script>
+    const { createApp, reactive } = Vue;
+    createApp({
+        setup() {
+            const state = reactive({
+                baseUrl: window.location.origin,
+                form: { userId: "root", password: "123456" }
+            });
+
+            async function parseResponse(resp) {
+                const raw = await resp.text();
+                let data = raw;
+                try { data = JSON.parse(raw); } catch (_) {}
+                if (!resp.ok) throw new Error("HTTP " + resp.status + ": " + JSON.stringify(data));
+                return data;
+            }
+
+            async function post(path, body) {
+                const resp = await fetch(state.baseUrl.replace(/\/$/, "") + path, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                return parseResponse(resp);
+            }
+
+            async function login() {
+                try {
+                    const result = await post("/api/auth/login", state.form);
+                    if (!result.ok || !result.token) {
+                        throw new Error("用户名或密码错误");
+                    }
+                    localStorage.setItem("rag_token", result.token);
+                    localStorage.setItem("rag_base_url", state.baseUrl);
+                    localStorage.setItem("rag_profile", JSON.stringify(result.profile || {}));
+                    window.location.href = "/index.html";
+                } catch (e) {
+                    ElementPlus.ElMessage.error("登录失败: " + e.message);
+                }
+            }
+
+            async function register() {
+                try {
+                    const result = await post("/api/auth/register", state.form);
+                    if (!result.ok) throw new Error("用户已存在或参数不合法");
+                    ElementPlus.ElMessage.success("注册成功，请登录");
+                } catch (e) {
+                    ElementPlus.ElMessage.error("注册失败: " + e.message);
+                }
+            }
+
+            return { state, login, register };
+        }
+    }).use(ElementPlus).mount("#app");
+</script>
+</body>
+</html>
